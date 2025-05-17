@@ -12,7 +12,7 @@ wss.on('connection', (ws) => {
   console.log('\n🟢 New WebSocket connection established.');
 
   ws.on('message', (message) => {
-    console.log('📩 Received a message of length: ', message.length);
+    console.log('📩 Received message of length:', message.length);
     const data = JSON.parse(message);
 
     switch (data.type) {
@@ -71,6 +71,17 @@ wss.on('connection', (ws) => {
         }
         break;
 
+      case 'stop':
+        console.log('⏹️ Stop received from broadcaster.');
+        // notify all viewers to stop
+        wss.clients.forEach(client => {
+          if (client !== ws && client.readyState === WebSocket.OPEN && client.role === 'viewer') {
+            client.send(JSON.stringify({ type: 'stop' }));
+            console.log('➡️ Stop forwarded to watcher.');
+          }
+        });
+        break;
+
       default:
         console.log('❓ Unknown message type:', data.type);
         break;
@@ -81,6 +92,11 @@ wss.on('connection', (ws) => {
     if (ws === broadcaster) {
       broadcaster = null;
       console.log('🔴 Broadcaster disconnected.');
+      wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN && client.role === 'viewer') {
+          client.send(JSON.stringify({ type: 'stop' }));
+        }
+      });
     } else {
       console.log('🔴 A viewer disconnected.');
     }

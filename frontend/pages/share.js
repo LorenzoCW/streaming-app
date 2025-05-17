@@ -7,10 +7,12 @@ export default function Share() {
   const imageRef = useRef(null);
   const peerRef = useRef();
   const wsRef = useRef();
+  const streamRef = useRef(null);
 
   const toastQueue = useRef([]);
   const isShowing = useRef(false);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
 
   const processQueue = () => {
     if (isShowing.current || toastQueue.current.length === 0) return;
@@ -34,19 +36,19 @@ export default function Share() {
 
   const showLog = (...args) => {
     if (true) {
-      const msg = args.join(' ');
-      console.log(msg);
+      console.log(...args);
     }
   };
 
   const showToast = (...args) => {
-    const msg = args.join(' ');
-    toastQueue.current.push(msg);
+    toastQueue.current.push(args.join(' '));
     processQueue();
   };
 
-  useEffect(() => {
-    showLog('Connecting to signaling server as broadcaster...');
+  const startStreaming = async () => {
+    if (isStreaming) return;
+    setIsStreaming(true);
+    showLog('Starting broadcast...');
     wsRef.current = new WebSocket('ws://localhost:4000');
 
     wsRef.current.onopen = () => {
@@ -54,119 +56,118 @@ export default function Share() {
       wsRef.current.send(JSON.stringify({ type: 'broadcaster' }));
     };
 
-    const start = async () => {
-      // 1) Obtain media stream
-      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-      showToast('⏺️ Stream iniciada.');
+    const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+    streamRef.current = stream;
+    showToast('⏺️ Stream iniciada.');
 
-      // notify when stream ends
-      stream.getTracks().forEach(track => {
-        track.onended = () => {
-          showToast('⏹️ Stream encerrada.');
-        };
-      });
+    stream.getTracks().forEach(track => {
+      track.onended = () => handleStop();
+    });
 
-      // attach to hidden video
-      const hiddenVideo = videoRef.current;
-      hiddenVideo.srcObject = stream;
-      hiddenVideo.play();
+    const hiddenVideo = videoRef.current;
+    hiddenVideo.srcObject = stream;
+    hiddenVideo.play();
 
-      // 2) Set up peer connection
-      const pc = new RTCPeerConnection();
-      peerRef.current = pc;
-      showLog('🔧 RTCPeerConnection created (broadcaster).');
-      let trackNumber = 0
-      stream.getTracks().forEach(track => {
-        pc.addTrack(track, stream);
-        showToast('➕ Faixa adicionada:', track.kind);
-        trackNumber += 1
-      });
+    const pc = new RTCPeerConnection();
+    peerRef.current = pc;
+    showLog('RTCPeerConnection created.');
 
-      if (trackNumber < 2) {
-        showToast('🔇 A stream está silenciada.')
+    let count = 0;
+    stream.getTracks().forEach(track => {
+      pc.addTrack(track, stream);
+      showToast('➕ Faixa adicionada: ' + track.kind);
+      count++;
+    });
+    if (count < 2) showToast('🔇 A stream está silenciada.');
+
+    pc.onicecandidate = ({ candidate }) => {
+      if (candidate) {
+        showLog('Sending ICE candidate from broadcaster:', candidate);
+        wsRef.current.send(JSON.stringify({ type: 'ice-candidate', candidate }));
       }
-
-      pc.onicecandidate = ({ candidate }) => {
-        if (candidate) {
-          showLog('❄️ Sending ICE candidate from broadcaster:', candidate);
-          wsRef.current.send(JSON.stringify({ type: 'ice-candidate', candidate }));
-        }
-      };
-
-      pc.onconnectionstatechange = () => {
-        const state = pc.connectionState;
-        if (state === 'disconnected' || state === 'closed') {
-          showToast('🔌 Espectador desconectado.');
-        }
-      };
-
-      wsRef.current.onmessage = async ({ data }) => {
-        const json = JSON.parse(data);
-        showLog('Message received by broadcaster:', json);
-
-        if (json.type === 'watcher') {
-          showToast('👀 Espectador conectado.');
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          wsRef.current.send(JSON.stringify({ type: 'offer', sdp: offer }));
-        } else if (json.type === 'answer') {
-          showLog('Received answer from watcher.');
-          await pc.setRemoteDescription(new RTCSessionDescription(json.sdp));
-        } else if (json.type === 'ice-candidate') {
-          showLog('Received ICE candidate from watcher.');
-          await pc.addIceCandidate(new RTCIceCandidate(json.candidate));
-        }
-      };
-
-      // 3) Start snapshot loop every 3 seconds
-      const canvas = document.createElement('canvas');
-      const imgEl = imageRef.current;
-      // canvas.width = 1920;
-      // canvas.height = 1080;
-      canvas.width = 960;
-      canvas.height = 540;
-      const ctx = canvas.getContext('2d');
-
-      const intervalId = setInterval(() => {
-        if (hiddenVideo.readyState >= 2) {
-          ctx.drawImage(hiddenVideo, 0, 0, canvas.width, canvas.height);
-          imgEl.src = canvas.toDataURL('image/png');
-          setImageLoaded(true);
-        }
-      }, 3000);
-
-      // cleanup on unmount
-      return () => clearInterval(intervalId);
     };
 
-    start();
-  }, []);
+    pc.onconnectionstatechange = () => {
+      // if (pc.connectionState === 'disconnected' || pc.connectionState === 'closed') {
+      if (['disconnected', 'closed'].includes(pc.connectionState)) {
+        showToast('🔌 Espectador desconectado.');
+      }
+    };
+
+    wsRef.current.onmessage = async ({ data }) => {
+      const msg = JSON.parse(data);
+      showLog('Message received by broadcaster:', msg);
+
+      if (msg.type === 'watcher') {
+        showToast('👀 Espectador conectado.');
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        wsRef.current.send(JSON.stringify({ type: 'offer', sdp: offer }));
+      } else if (msg.type === 'answer') {
+        showLog('Received answer from watcher.');
+        await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+      } else if (msg.type === 'ice-candidate') {
+        showLog('Received ICE candidate from watcher.');
+        await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
+      }
+    };
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 960;
+    canvas.height = 540;
+    const ctx = canvas.getContext('2d');
+
+    const intervalId = setInterval(() => {
+      if (hiddenVideo.readyState >= 2) {
+        ctx.drawImage(hiddenVideo, 0, 0, canvas.width, canvas.height);
+        imageRef.current.src = canvas.toDataURL('image/png');
+        setImageLoaded(true);
+      }
+    }, 3000);
+
+    // store cleanup
+    streamRef.current._cleanup = () => clearInterval(intervalId);
+  };
+
+  const handleStop = () => {
+    if (!isStreaming) return;
+    setIsStreaming(false);
+    showLog('Stopping broadcast...');
+    showToast('⏹️ Stream encerrada.');
+
+    // notify viewers to close
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'stop' }));
+    }
+
+    // cleanup snapshot loop
+    streamRef.current._cleanup();
+
+    // stop media tracks
+    streamRef.current.getTracks().forEach(t => t.stop());
+
+    // close peer and websocket
+    peerRef.current.close();
+    wsRef.current.close();
+
+    setImageLoaded(false);
+  };
 
   return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      height: '100vh',
-      flexDirection: 'column',
-      fontFamily: 'sans-serif',
-    }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', fontFamily: 'sans-serif' }}>
+      <div style={{ marginBottom: '1rem' }}>
+        <button onClick={startStreaming} disabled={isStreaming} style={{ marginRight: '0.5rem' }}>
+          Iniciar Transmissão
+        </button>
+        <button onClick={handleStop} disabled={!isStreaming}>
+          Parar Transmissão
+        </button>
+      </div>
+      <div style={{ marginBottom: '1rem' }}>Status: {isStreaming ? 'Transmissão ativa' : 'Transmissão parada'}</div>
 
       <video ref={videoRef} muted playsInline style={{ display: 'none' }} />
-
-      {!imageLoaded && <div style={{ fontSize: '1.5rem', color: '#666' }}>Iniciando pré-visualização...</div>}
-
-      <img
-        ref={imageRef}
-        alt="Screen snapshot"
-        style={{
-          display: imageLoaded ? 'block' : 'none',
-          width: '960px',
-          height: '540px',
-          objectFit: 'cover',
-        }}
-      />
-
+      {isStreaming && !imageLoaded && <div style={{ fontSize: '1.5rem', color: '#666' }}>Iniciando pré-visualização...</div>}
+      <img ref={imageRef} alt="Screen snapshot" style={{ display: imageLoaded ? 'block' : 'none', width: '960px', height: '540px', objectFit: 'cover' }} />
       <ToastContainer />
     </div>
   );
