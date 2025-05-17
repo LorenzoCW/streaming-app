@@ -18,7 +18,7 @@ export default function Share() {
     const nextMessage = toastQueue.current.shift();
     toast.info(nextMessage, {
       position: 'top-right',
-      autoClose: 4000,
+      autoClose: 40000,
       pauseOnFocusLoss: false,
       pauseOnHover: false,
       theme: 'light',
@@ -32,71 +32,99 @@ export default function Share() {
     });
   };
 
-  const message = (...args) => {
+  const showLog = (...args) => {
+    if (true) {
+      const msg = args.join(' ');
+      console.log(msg);
+    }
+  };
+
+  const showToast = (...args) => {
     const msg = args.join(' ');
-    console.log(msg);
     toastQueue.current.push(msg);
     processQueue();
   };
 
   useEffect(() => {
-    message('📡 Connecting to signaling server as broadcaster...');
+    showLog('Connecting to signaling server as broadcaster...');
     wsRef.current = new WebSocket('ws://localhost:4000');
 
     wsRef.current.onopen = () => {
-      message('✅ WebSocket connection opened (broadcaster).');
+      showLog('WebSocket connected (broadcaster)');
       wsRef.current.send(JSON.stringify({ type: 'broadcaster' }));
     };
 
     const start = async () => {
       // 1) Obtain media stream
       const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-      message('📷 Screen sharing stream obtained.');
+      showToast('⏺️ Stream iniciada.');
+
+      // notify when stream ends
+      stream.getTracks().forEach(track => {
+        track.onended = () => {
+          showToast('⏹️ Stream encerrada.');
+        };
+      });
 
       // attach to hidden video
       const hiddenVideo = videoRef.current;
       hiddenVideo.srcObject = stream;
       hiddenVideo.play();
 
-      // 2) Set up peer connection as before
+      // 2) Set up peer connection
       const pc = new RTCPeerConnection();
       peerRef.current = pc;
-      message('🔧 RTCPeerConnection created (broadcaster).');
+      showLog('🔧 RTCPeerConnection created (broadcaster).');
+      let trackNumber = 0
       stream.getTracks().forEach(track => {
         pc.addTrack(track, stream);
-        message('➕ Track added:', track.kind);
+        showToast('➕ Faixa adicionada:', track.kind);
+        trackNumber += 1
       });
+
+      if (trackNumber < 2) {
+        showToast('🔇 A stream está silenciada.')
+      }
 
       pc.onicecandidate = ({ candidate }) => {
         if (candidate) {
-          message('❄️ Sending ICE candidate from broadcaster:', candidate);
+          showLog('❄️ Sending ICE candidate from broadcaster:', candidate);
           wsRef.current.send(JSON.stringify({ type: 'ice-candidate', candidate }));
         }
       };
 
-      wsRef.current.onmessage = async ({ data }) => {
-        const json_message = JSON.parse(data);
-        message('📬 Message received by broadcaster:', json_message);
+      pc.onconnectionstatechange = () => {
+        const state = pc.connectionState;
+        if (state === 'disconnected' || state === 'closed') {
+          showToast('🔌 Espectador desconectado.');
+        }
+      };
 
-        if (json_message.type === 'watcher') {
-          message('👀 Watcher connected. Creating and sending offer...');
+      wsRef.current.onmessage = async ({ data }) => {
+        const json = JSON.parse(data);
+        showLog('Message received by broadcaster:', json);
+
+        if (json.type === 'watcher') {
+          showToast('👀 Espectador conectado.');
           const offer = await pc.createOffer();
           await pc.setLocalDescription(offer);
           wsRef.current.send(JSON.stringify({ type: 'offer', sdp: offer }));
-        } else if (json_message.type === 'answer') {
-          message('📥 Received answer from watcher.');
-          await pc.setRemoteDescription(new RTCSessionDescription(json_message.sdp));
-        } else if (json_message.type === 'ice-candidate') {
-          message('❄️ Received ICE candidate from watcher.');
-          await pc.addIceCandidate(new RTCIceCandidate(json_message.candidate));
+        } else if (json.type === 'answer') {
+          showLog('Received answer from watcher.');
+          await pc.setRemoteDescription(new RTCSessionDescription(json.sdp));
+        } else if (json.type === 'ice-candidate') {
+          showLog('Received ICE candidate from watcher.');
+          await pc.addIceCandidate(new RTCIceCandidate(json.candidate));
         }
       };
 
       // 3) Start snapshot loop every 3 seconds
       const canvas = document.createElement('canvas');
       const imgEl = imageRef.current;
-      // canvas.width = 1920; canvas.height = 1080;
-      canvas.width = 960; canvas.height = 540;
+      // canvas.width = 1920;
+      // canvas.height = 1080;
+      canvas.width = 960;
+      canvas.height = 540;
       const ctx = canvas.getContext('2d');
 
       const intervalId = setInterval(() => {
@@ -126,7 +154,7 @@ export default function Share() {
 
       <video ref={videoRef} muted playsInline style={{ display: 'none' }} />
 
-      {!imageLoaded && <div style={{ fontSize: '1.5rem', color: '#666' }}>Carregando...</div>}
+      {!imageLoaded && <div style={{ fontSize: '1.5rem', color: '#666' }}>Iniciando pré-visualização...</div>}
 
       <img
         ref={imageRef}

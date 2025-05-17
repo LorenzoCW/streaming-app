@@ -18,7 +18,7 @@ export default function View() {
     const nextMessage = toastQueue.current.shift();
     toast.info(nextMessage, {
       position: "top-right",
-      autoClose: 4000,
+      autoClose: 40000,
       pauseOnFocusLoss: false,
       pauseOnHover: false,
       theme: "light",
@@ -32,58 +32,81 @@ export default function View() {
     });
   };
 
-  const message = (...args) => {
+  const showLog = (...args) => {
+    if (true) {
+      const msg = args.join(' ');
+      console.log(msg);
+    }
+  };
+
+  const showToast = (...args) => {
     const msg = args.join(' ');
-    console.log(msg);
     toastQueue.current.push(msg);
     processQueue();
   };
 
   useEffect(() => {
-    message('📡 Connecting to signaling server as viewer...');
+    showLog('Connecting to signaling server as viewer...');
     wsRef.current = new WebSocket('ws://localhost:4000');
 
     // create peer connection and handlers before signaling
     const pc = new RTCPeerConnection();
     peerRef.current = pc;
-    message('🔧 RTCPeerConnection created (viewer).');
+    let isFirstTrack = true;
+    showLog('🔧 RTCPeerConnection created (viewer).');
 
     pc.ontrack = event => {
-      message('📺 Received media stream from broadcaster.');
+      showLog('Received media stream from broadcaster.');
       videoRef.current.srcObject = event.streams[0];
+
       videoRef.current.onloadedmetadata = () => {
         // ensure playback starts automatically
-        videoRef.current.play().catch(err => console.warn('Playback was prevented:', err));
-      };
+        videoRef.current.play().catch(() => { });
+      }
+      showLog('Stream started.');
+
+      if (isFirstTrack) {
+        showToast('✅ Conectado à stream.');
+        isFirstTrack = false;
+      }
     };
 
     pc.onicecandidate = ({ candidate }) => {
       if (candidate) {
-        message('❄️ Sending ICE candidate from viewer:', candidate);
+        showLog('Sending ICE candidate from viewer:', candidate);
         wsRef.current.send(JSON.stringify({ type: 'ice-candidate', candidate }));
       }
     };
 
     wsRef.current.onmessage = async ({ data }) => {
-      const json_message = JSON.parse(data);
-      message('📬 Message received by viewer:', json_message);
+      const message = JSON.parse(data);
+      showLog('Message received by viewer:', message);
 
-      if (json_message.type === 'offer') {
-        message('📥 Received offer from broadcaster.');
-        await pc.setRemoteDescription(new RTCSessionDescription(json_message.sdp));
+      if (message.type === 'offer') {
+        showLog('Received offer from broadcaster.');
+        await pc.setRemoteDescription(new RTCSessionDescription(message.sdp));
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
-        wsRef.current.send(JSON.stringify({ type: 'answer', sdp: answer }));
-        message('📤 Sent answer to broadcaster.');
-      } else if (json_message.type === 'ice-candidate') {
-        message('❄️ Received ICE candidate from broadcaster.');
-        await pc.addIceCandidate(new RTCIceCandidate(json_message.candidate));
+        wsRef.current.send(message.stringify({ type: 'answer', sdp: answer }));
+        showLog('Sent answer to broadcaster.');
+      } else if (message.type === 'ice-candidate') {
+        showLog(' Received ICE candidate from broadcaster.');
+        await pc.addIceCandidate(new RTCIceCandidate(message.candidate));
       }
     };
 
     wsRef.current.onopen = () => {
-      message('✅ WebSocket connection opened (viewer).');
+      showLog('Connected to server (viewer).');
       wsRef.current.send(JSON.stringify({ type: 'watcher' }));
+    };
+
+    wsRef.current.onclose = () => {
+      showLog('Disconnected from signaling server.');
+    };
+
+    return () => {
+      pc.close();
+      wsRef.current.close();
     };
 
   }, []);
@@ -91,6 +114,7 @@ export default function View() {
   const handleEnableAudio = () => {
     videoRef.current.muted = false;
     setAudioEnabled(true);
+    showToast('🔊 Áudio ativado.');
   };
 
   return (
