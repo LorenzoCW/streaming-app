@@ -8,7 +8,6 @@ export default function View() {
   const peerRef = useRef(null);
   const wsRef = useRef(null);
   const watcherIdRef = useRef(null);
-  const firstTrackRef = useRef(true);
   const [audioEnabled, setAudioEnabled] = useState(false);
 
   const toastQueue = useRef([]);
@@ -24,6 +23,7 @@ export default function View() {
       pauseOnFocusLoss: false,
       pauseOnHover: false,
       theme: 'light',
+      icon: false,
       transition: Slide,
       onOpen: () => {
         setTimeout(() => {
@@ -45,56 +45,13 @@ export default function View() {
     processQueue();
   };
 
-  const muteMedia = () => {
-    if (videoRef.current && videoRef.current.srcObject) {
-      videoRef.current.srcObject.getTracks().forEach(track => track.stop());
-      videoRef.current.srcObject = null;
-    }
-  };
-
-  const cleanup = () => {
-    muteMedia()
-
-    // Close peer connection
-    if (peerRef.current) {
-      peerRef.current.close();
-      peerRef.current = null;
-    }
-    // Close websocket
-    if (wsRef.current) {
-      wsRef.current.onclose = null;
-      wsRef.current.close();
-      wsRef.current = null;
-    }
-    // Reset first track flag
-    firstTrackRef.current = true;
-  };
-
   const connect = () => {
-    // cleanup();
 
     showLog('Connecting to signaling server as viewer...');
 
     if (wsRef.current) wsRef.current.close();
     wsRef.current = new WebSocket('ws://localhost:4000');
     showLog('RTCPeerConnection created (viewer).');
-
-    // pc.ontrack = event => {
-    //   showLog('Received media stream from broadcaster.');
-    //   videoRef.current.srcObject = event.streams[0];
-    //   videoRef.current.play().catch(() => { });
-    //   if (firstTrackRef.current) {
-    //     showToast('✅ Conectado à stream.');
-    //     firstTrackRef.current = false;
-    //   }
-    // };
-
-    // pc.onicecandidate = ({ candidate }) => {
-    //   if (candidate && ws.readyState === WebSocket.OPEN) {
-    //     showLog('Sending ICE candidate from viewer:', candidate);
-    //     ws.send(JSON.stringify({ type: 'ice-candidate', candidate }));
-    //   }
-    // };
 
     wsRef.current.onopen = () => {
       showLog('Connected to server (viewer).');
@@ -104,11 +61,6 @@ export default function View() {
     wsRef.current.onmessage = async ({ data }) => {
       const msg = JSON.parse(data);
       showLog('Message received by viewer:', msg);
-
-      // if (!peerRef.current || peerRef.current.signalingState === 'closed') {
-      //   showLog('Peer connection closed, ignoring message.');
-      //   return;
-      // }
 
       try {
         if (msg.type === 'start') {
@@ -123,12 +75,16 @@ export default function View() {
           const pc = new RTCPeerConnection();
           peerRef.current = pc;
 
-          pc.ontrack = e => {
-            videoRef.current.srcObject = e.streams[0];
-            videoRef.current.play();
+          pc.ontrack = event => {
+            if (event.track.kind === 'video') showToast('✅ Conectado à stream');
+            showLog('Received media stream from broadcaster.');
+            videoRef.current.srcObject = event.streams[0];
+            videoRef.current.play().catch(() => { showLog('Previous video track interrupted.') });
           };
+
           pc.onicecandidate = ({ candidate }) => {
             if (candidate) {
+              showLog('Sending ICE candidate from viewer:', candidate);
               wsRef.current.send(JSON.stringify({ type: 'ice-candidate', id: watcherIdRef.current, candidate }));
             }
           };
@@ -146,7 +102,7 @@ export default function View() {
         }
 
         else if (msg.type === 'close') {
-          showToast('✖️ Transmissão encerrada.');
+          showToast('✖️ Transmissão encerrada');
           peerRef.current?.close();
           watcherIdRef.current = null;
         }
@@ -178,7 +134,7 @@ export default function View() {
     if (videoRef.current) {
       videoRef.current.muted = false;
       setAudioEnabled(true);
-      showToast('🔊 Áudio ativado.');
+      showToast('🔊 Áudio ativado');
     }
   };
 

@@ -63,7 +63,7 @@ export default function Share() {
     const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
     streamRef.current = stream;
     videoRef.current.srcObject = stream;
-    showToast('⏺️ Stream iniciada.');
+    showToast('⏺️ Stream sendo transmitida');
 
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'start' }));
@@ -77,21 +77,6 @@ export default function Share() {
     hiddenVideo.srcObject = stream;
     hiddenVideo.play();
 
-    // Readicionar
-    // let trackCount = 0;
-    // stream.getTracks().forEach(track => {
-    //   pc.addTrack(track, stream);
-    //   showLog('Faixa adicionada: ' + track.kind);
-    //   trackCount++;
-    // });
-    // if (trackCount < 2) showToast('🔇 A stream está silenciada.');
-
-    // pc.onconnectionstatechange = () => {
-    //   if (['disconnected', 'closed'].includes(pc.connectionState)) {
-    //     showToast('🔌 Espectador desconectado.');
-    //   }
-    // };
-
     wsRef.current.onmessage = async ({ data }) => {
       const msg = JSON.parse(data);
       showLog('Message received by broadcaster:', msg);
@@ -102,7 +87,20 @@ export default function Share() {
         peers.current[id] = pc;
         showLog('New RTCPeerConnection created.');
 
-        stream.getTracks().forEach(track => pc.addTrack(track, stream));
+        let isAudioEnabled = false
+        stream.getTracks().forEach(track => {
+          pc.addTrack(track, stream);
+          showLog('Faixa adicionada: ' + track.kind);
+          if (track.kind === 'audio') isAudioEnabled = true
+        });
+        if (!isAudioEnabled) showToast('🔇 A stream está silenciada');
+
+        pc.onconnectionstatechange = () => {
+          if (['disconnected', 'closed'].includes(pc.connectionState)) {
+            showToast('🔌 Espectador desconectado:', id);
+          }
+        };
+
         pc.onicecandidate = ({ candidate }) => {
           if (candidate) {
             showLog('Sending ICE candidate from broadcaster:', candidate);
@@ -114,7 +112,7 @@ export default function Share() {
         await pc.setLocalDescription(offer);
         wsRef.current.send(JSON.stringify({ type: 'offer', id, sdp: offer }));
 
-        showToast('👀 Espectador conectado.');
+        showToast('👀 Espectador conectado:', id);
 
       } else if (msg.type === 'answer') {
         showLog('Received answer from watcher.');
@@ -139,7 +137,7 @@ export default function Share() {
         imageRef.current.src = canvas.toDataURL('image/png');
         setImageLoaded(true);
       }
-    }, 3000);
+    }, 5000);
 
     streamRef.current._cleanup = () => clearInterval(intervalId);
   };
@@ -147,7 +145,7 @@ export default function Share() {
   const handleStop = () => {
     if (!isStreaming) return;
     setIsStreaming(false);
-    showToast('⏹️ Stream encerrada.');
+    showToast('⏹️ Stream encerrada');
 
     // cleanup snapshot loop
     streamRef.current._cleanup();
