@@ -1,3 +1,4 @@
+// server.js
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
@@ -71,13 +72,13 @@ wss.on('connection', (ws) => {
         }
         break;
 
-      case 'stop':
-        console.log('⏹️ Stop received from broadcaster.');
-        // notify all viewers to stop
+      case 'start':
+        console.log('▶️ Host has started broadcasting.');
+        // avisa todos os viewers para reconectar/iniciar view
         wss.clients.forEach(client => {
-          if (client !== ws && client.readyState === WebSocket.OPEN && client.role === 'viewer') {
-            client.send(JSON.stringify({ type: 'stop' }));
-            console.log('➡️ Stop forwarded to watcher.');
+          if (client.readyState === WebSocket.OPEN && client.role === 'viewer') {
+            client.send(JSON.stringify({ type: 'start' }));
+            console.log('➡️ Start notification sent to a viewer.');
           }
         });
         break;
@@ -94,7 +95,8 @@ wss.on('connection', (ws) => {
       console.log('🔴 Broadcaster disconnected.');
       wss.clients.forEach(client => {
         if (client.readyState === WebSocket.OPEN && client.role === 'viewer') {
-          client.send(JSON.stringify({ type: 'stop' }));
+          client.send(JSON.stringify({ type: 'close' }));
+          console.log('➡️ Close notification sent to a viewer.');
         }
       });
     } else {

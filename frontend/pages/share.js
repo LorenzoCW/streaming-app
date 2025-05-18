@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+// share.js
+import { useRef, useState } from 'react';
 import { ToastContainer, toast, Slide } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
@@ -20,7 +21,7 @@ export default function Share() {
     const nextMessage = toastQueue.current.shift();
     toast.info(nextMessage, {
       position: 'top-right',
-      autoClose: 40000,
+      autoClose: 5000,
       pauseOnFocusLoss: false,
       pauseOnHover: false,
       theme: 'light',
@@ -41,6 +42,7 @@ export default function Share() {
   };
 
   const showToast = (...args) => {
+    showLog(...args)
     toastQueue.current.push(args.join(' '));
     processQueue();
   };
@@ -52,13 +54,17 @@ export default function Share() {
     wsRef.current = new WebSocket('ws://localhost:4000');
 
     wsRef.current.onopen = () => {
-      showLog('WebSocket connected (broadcaster)');
+      showLog('WebSocket connected (broadcaster).');
       wsRef.current.send(JSON.stringify({ type: 'broadcaster' }));
     };
 
     const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
     streamRef.current = stream;
     showToast('⏺️ Stream iniciada.');
+
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'start' }));
+    }
 
     stream.getTracks().forEach(track => {
       track.onended = () => handleStop();
@@ -72,13 +78,13 @@ export default function Share() {
     peerRef.current = pc;
     showLog('RTCPeerConnection created.');
 
-    let count = 0;
+    let trackCount = 0;
     stream.getTracks().forEach(track => {
       pc.addTrack(track, stream);
-      showToast('➕ Faixa adicionada: ' + track.kind);
-      count++;
+      showLog('Faixa adicionada: ' + track.kind);
+      trackCount++;
     });
-    if (count < 2) showToast('🔇 A stream está silenciada.');
+    if (trackCount < 2) showToast('🔇 A stream está silenciada.');
 
     pc.onicecandidate = ({ candidate }) => {
       if (candidate) {
@@ -88,7 +94,6 @@ export default function Share() {
     };
 
     pc.onconnectionstatechange = () => {
-      // if (pc.connectionState === 'disconnected' || pc.connectionState === 'closed') {
       if (['disconnected', 'closed'].includes(pc.connectionState)) {
         showToast('🔌 Espectador desconectado.');
       }
@@ -125,26 +130,19 @@ export default function Share() {
       }
     }, 3000);
 
-    // store cleanup
     streamRef.current._cleanup = () => clearInterval(intervalId);
   };
 
   const handleStop = () => {
     if (!isStreaming) return;
     setIsStreaming(false);
-    showLog('Stopping broadcast...');
     showToast('⏹️ Stream encerrada.');
-
-    // notify viewers to close
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'stop' }));
-    }
 
     // cleanup snapshot loop
     streamRef.current._cleanup();
 
     // stop media tracks
-    streamRef.current.getTracks().forEach(t => t.stop());
+    streamRef.current.getTracks().forEach(track => track.stop());
 
     // close peer and websocket
     peerRef.current.close();
