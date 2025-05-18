@@ -1,7 +1,8 @@
 // share.js
 import { useRef, useState } from 'react';
-import { ToastContainer, toast, Slide } from 'react-toastify';
+import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import { showToast, showLog } from '../components/toastUtils';
 
 export default function Share() {
   const videoRef = useRef(null);
@@ -10,43 +11,8 @@ export default function Share() {
   const peers = useRef({});
   const streamRef = useRef(null);
 
-  const toastQueue = useRef([]);
-  const isShowing = useRef(false);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
-
-  const processQueue = () => {
-    if (isShowing.current || toastQueue.current.length === 0) return;
-    isShowing.current = true;
-    const nextMessage = toastQueue.current.shift();
-    toast.info(nextMessage, {
-      position: 'top-right',
-      autoClose: 5000,
-      pauseOnFocusLoss: false,
-      pauseOnHover: false,
-      theme: 'light',
-      icon: false,
-      transition: Slide,
-      onOpen: () => {
-        setTimeout(() => {
-          isShowing.current = false;
-          processQueue();
-        }, 2000);
-      },
-    });
-  };
-
-  const showLog = (...args) => {
-    if (true) {
-      console.log(...args);
-    }
-  };
-
-  const showToast = (...args) => {
-    showLog(...args)
-    toastQueue.current.push(args.join(' '));
-    processQueue();
-  };
 
   const startStreaming = async () => {
     if (isStreaming) return;
@@ -64,6 +30,11 @@ export default function Share() {
     streamRef.current = stream;
     videoRef.current.srcObject = stream;
     showToast('⏺️ Stream sendo transmitida');
+
+    const hasAudio = stream.getAudioTracks().length > 0;
+    if (!hasAudio) {
+      showToast('🔇 A stream está silenciada');
+    }
 
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'start' }));
@@ -87,13 +58,10 @@ export default function Share() {
         peers.current[id] = pc;
         showLog('New RTCPeerConnection created.');
 
-        let isAudioEnabled = false
         stream.getTracks().forEach(track => {
           pc.addTrack(track, stream);
           showLog('Faixa adicionada: ' + track.kind);
-          if (track.kind === 'audio') isAudioEnabled = true
         });
-        if (!isAudioEnabled) showToast('🔇 A stream está silenciada');
 
         pc.onconnectionstatechange = () => {
           if (['disconnected', 'closed'].includes(pc.connectionState)) {

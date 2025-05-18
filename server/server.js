@@ -2,7 +2,6 @@
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
-const { v4: uuidv4 } = require('uuid');
 
 const app = express();
 const server = http.createServer(app);
@@ -26,7 +25,7 @@ wss.on('connection', (ws) => {
 
       case 'watcher':
         ws.role = 'viewer';
-        ws.id = uuidv4();
+        ws.id = Math.floor(1000 + Math.random() * 9000);
         console.log(`👀 Watcher connected: ${ws.id}`);
         if (broadcaster && broadcaster.readyState === WebSocket.OPEN) {
           broadcaster.send(JSON.stringify({ type: 'watcher', id: ws.id }));

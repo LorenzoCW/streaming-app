@@ -1,7 +1,8 @@
 // view.js
 import { useEffect, useRef, useState } from 'react';
-import { ToastContainer, toast, Slide } from 'react-toastify';
+import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import { showToast, showLog } from '../components/toastUtils';
 
 export default function View() {
   const videoRef = useRef(null);
@@ -10,43 +11,7 @@ export default function View() {
   const watcherIdRef = useRef(null);
   const [audioEnabled, setAudioEnabled] = useState(false);
 
-  const toastQueue = useRef([]);
-  const isShowing = useRef(false);
-
-  const processQueue = () => {
-    if (isShowing.current || toastQueue.current.length === 0) return;
-    isShowing.current = true;
-    const nextMessage = toastQueue.current.shift();
-    toast.info(nextMessage, {
-      position: 'top-right',
-      autoClose: 5000,
-      pauseOnFocusLoss: false,
-      pauseOnHover: false,
-      theme: 'light',
-      icon: false,
-      transition: Slide,
-      onOpen: () => {
-        setTimeout(() => {
-          isShowing.current = false;
-          processQueue();
-        }, 2000);
-      },
-    });
-  };
-
-  const showLog = (...args) => {
-    if (true) {
-      console.log(...args);
-    }
-  };
-  const showToast = (...args) => {
-    showLog(...args)
-    toastQueue.current.push(args.join(' '));
-    processQueue();
-  };
-
   const connect = () => {
-
     showLog('Connecting to signaling server as viewer...');
 
     if (wsRef.current) wsRef.current.close();
