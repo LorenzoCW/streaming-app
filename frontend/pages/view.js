@@ -7,6 +7,7 @@ export default function View() {
   const videoRef = useRef(null);
   const peerRef = useRef(null);
   const wsRef = useRef(null);
+  const watcherIdRef = useRef(null);
   const firstTrackRef = useRef(true);
   const [audioEnabled, setAudioEnabled] = useState(false);
 
@@ -70,81 +71,102 @@ export default function View() {
   };
 
   const connect = () => {
-    cleanup();
+    // cleanup();
 
     showLog('Connecting to signaling server as viewer...');
 
-    const ws = new WebSocket('ws://localhost:4000');
-    wsRef.current = ws;
-
-    const pc = new RTCPeerConnection();
-    peerRef.current = pc;
-
+    if (wsRef.current) wsRef.current.close();
+    wsRef.current = new WebSocket('ws://localhost:4000');
     showLog('RTCPeerConnection created (viewer).');
 
-    pc.ontrack = event => {
-      showLog('Received media stream from broadcaster.');
-      videoRef.current.srcObject = event.streams[0];
-      videoRef.current.play().catch(() => { });
-      if (firstTrackRef.current) {
-        showToast('✅ Conectado à stream.');
-        firstTrackRef.current = false;
-      }
-    };
+    // pc.ontrack = event => {
+    //   showLog('Received media stream from broadcaster.');
+    //   videoRef.current.srcObject = event.streams[0];
+    //   videoRef.current.play().catch(() => { });
+    //   if (firstTrackRef.current) {
+    //     showToast('✅ Conectado à stream.');
+    //     firstTrackRef.current = false;
+    //   }
+    // };
 
-    pc.onicecandidate = ({ candidate }) => {
-      if (candidate && ws.readyState === WebSocket.OPEN) {
-        showLog('Sending ICE candidate from viewer:', candidate);
-        ws.send(JSON.stringify({ type: 'ice-candidate', candidate }));
-      }
-    };
+    // pc.onicecandidate = ({ candidate }) => {
+    //   if (candidate && ws.readyState === WebSocket.OPEN) {
+    //     showLog('Sending ICE candidate from viewer:', candidate);
+    //     ws.send(JSON.stringify({ type: 'ice-candidate', candidate }));
+    //   }
+    // };
 
-    ws.onopen = () => {
+    wsRef.current.onopen = () => {
       showLog('Connected to server (viewer).');
-      ws.send(JSON.stringify({ type: 'watcher' }));
+      wsRef.current.send(JSON.stringify({ type: 'watcher' }));
     };
 
-    ws.onmessage = async ({ data }) => {
+    wsRef.current.onmessage = async ({ data }) => {
       const msg = JSON.parse(data);
       showLog('Message received by viewer:', msg);
 
-      if (!peerRef.current || peerRef.current.signalingState === 'closed') {
-        showLog('Peer connection closed, ignoring message.');
-        return;
-      }
+      // if (!peerRef.current || peerRef.current.signalingState === 'closed') {
+      //   showLog('Peer connection closed, ignoring message.');
+      //   return;
+      // }
 
       try {
-        if (msg.type === 'offer') {
+        if (msg.type === 'start') {
+          showLog('Transmissão iniciada pelo host.');
+          return connect();
+        }
+
+        else if (msg.type === 'offer') {
           showLog('Received offer from broadcaster.');
-          await peerRef.current.setRemoteDescription(new RTCSessionDescription(msg.sdp));
-          const answer = await peerRef.current.createAnswer();
-          await peerRef.current.setLocalDescription(answer);
-          ws.send(JSON.stringify({ type: 'answer', sdp: answer }));
+
+          watcherIdRef.current = msg.id;
+          const pc = new RTCPeerConnection();
+          peerRef.current = pc;
+
+          pc.ontrack = e => {
+            videoRef.current.srcObject = e.streams[0];
+            videoRef.current.play();
+          };
+          pc.onicecandidate = ({ candidate }) => {
+            if (candidate) {
+              wsRef.current.send(JSON.stringify({ type: 'ice-candidate', id: watcherIdRef.current, candidate }));
+            }
+          };
+
+          await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          wsRef.current.send(JSON.stringify({ type: 'answer', id: watcherIdRef.current, sdp: answer }));
           showLog('Sent answer to broadcaster.');
-        } else if (msg.type === 'ice-candidate') {
+        }
+
+        else if (msg.type === 'ice-candidate') {
           showLog('Received ICE candidate from broadcaster.');
           await peerRef.current.addIceCandidate(new RTCIceCandidate(msg.candidate));
-        } else if (msg.type === 'start') {
-          showLog('Transmissão iniciada pelo host.');
-          connect();
-        } else if (msg.type === 'close') {
+        }
+
+        else if (msg.type === 'close') {
           showToast('✖️ Transmissão encerrada.');
-          muteMedia();
-        } else {
+          peerRef.current?.close();
+          watcherIdRef.current = null;
+        }
+
+        else {
           showLog('Mensagem recebida desconhecida.');
         }
+
       } catch (err) {
         showLog('Error handling message:', err);
       }
     };
 
-    ws.onclose = () => {
+    wsRef.current.onclose = () => {
       showLog('Disconnected from signaling server.');
     };
 
-    ws.onerror = err => {
+    wsRef.current.onerror = err => {
       showLog('WebSocket error:', err, 'Closing and scheduling reconnect.');
-      ws.close();
+      wsRef.current.close();
     };
   };
 

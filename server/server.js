@@ -2,6 +2,7 @@
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
+const { v4: uuidv4 } = require('uuid');
 
 const app = express();
 const server = http.createServer(app);
@@ -25,48 +26,47 @@ wss.on('connection', (ws) => {
 
       case 'watcher':
         ws.role = 'viewer';
-        console.log('👀 Watcher connected.');
-        if (broadcaster) {
-          broadcaster.send(JSON.stringify({ type: 'watcher' }));
+        ws.id = uuidv4();
+        console.log(`👀 Watcher connected: ${ws.id}`);
+        if (broadcaster && broadcaster.readyState === WebSocket.OPEN) {
+          broadcaster.send(JSON.stringify({ type: 'watcher', id: ws.id }));
           console.log('➡️ Notified broadcaster of new watcher.');
         }
         break;
 
       case 'offer':
-        // from broadcaster to viewers
-        console.log('📤 Offer from broadcaster to watcher.');
+        console.log('📤 Offer from broadcaster to watcher:', data.id);
+        // send only to the targeted viewer
         wss.clients.forEach(client => {
-          if (client !== ws && client.readyState === WebSocket.OPEN && client.role === 'viewer') {
-            client.send(JSON.stringify({ type: 'offer', sdp: data.sdp }));
-            console.log('➡️ Offer sent to watcher.');
+          if (client.role === 'viewer' && client.id === data.id && client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify({ type: 'offer', id: data.id, sdp: data.sdp }));
+            console.log('➡️ Offer sent to watcher', data.id);
           }
         });
         break;
 
       case 'answer':
-        // from viewer to broadcaster
-        console.log('📥 Answer from watcher to broadcaster.');
-        if (broadcaster) {
-          broadcaster.send(JSON.stringify({ type: 'answer', sdp: data.sdp }));
+        console.log('📥 Answer from watcher to broadcaster:', data.id);
+        if (broadcaster && broadcaster.readyState === WebSocket.OPEN) {
+          broadcaster.send(JSON.stringify({ type: 'answer', id: data.id, sdp: data.sdp }));
           console.log('➡️ Answer forwarded to broadcaster.');
         }
         break;
 
       case 'ice-candidate':
-        console.log('❄️ ICE Candidate received.');
-        // forward ICE candidates
+        console.log('❄️ ICE Candidate received from', ws.role, ws.id);
         if (ws.role === 'broadcaster') {
-          // from broadcaster to all viewers
+          // forward from broadcaster to one viewer
           wss.clients.forEach(client => {
-            if (client !== ws && client.readyState === WebSocket.OPEN && client.role === 'viewer') {
-              client.send(JSON.stringify({ type: 'ice-candidate', candidate: data.candidate }));
-              console.log('➡️ ICE candidate sent to watcher.');
+            if (client.role === 'viewer' && client.id === data.id && client.readyState === WebSocket.OPEN) {
+              client.send(JSON.stringify({ type: 'ice-candidate', id: data.id, candidate: data.candidate }));
+              console.log('➡️ ICE candidate sent to watcher', data.id);
             }
           });
         } else if (ws.role === 'viewer') {
           // from viewer to broadcaster
-          if (broadcaster) {
-            broadcaster.send(JSON.stringify({ type: 'ice-candidate', candidate: data.candidate }));
+          if (broadcaster && broadcaster.readyState === WebSocket.OPEN) {
+            broadcaster.send(JSON.stringify({ type: 'ice-candidate', id: ws.id, candidate: data.candidate }));
             console.log('➡️ ICE candidate forwarded to broadcaster.');
           }
         }
@@ -74,9 +74,8 @@ wss.on('connection', (ws) => {
 
       case 'start':
         console.log('▶️ Host has started broadcasting.');
-        // avisa todos os viewers para reconectar/iniciar view
         wss.clients.forEach(client => {
-          if (client.readyState === WebSocket.OPEN && client.role === 'viewer') {
+          if (client.role === 'viewer' && client.readyState === WebSocket.OPEN) {
             client.send(JSON.stringify({ type: 'start' }));
             console.log('➡️ Start notification sent to a viewer.');
           }
@@ -94,13 +93,17 @@ wss.on('connection', (ws) => {
       broadcaster = null;
       console.log('🔴 Broadcaster disconnected.');
       wss.clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN && client.role === 'viewer') {
+        if (client.role === 'viewer' && client.readyState === WebSocket.OPEN) {
           client.send(JSON.stringify({ type: 'close' }));
           console.log('➡️ Close notification sent to a viewer.');
         }
       });
-    } else {
-      console.log('🔴 A viewer disconnected.');
+    } else if (ws.role === 'viewer') {
+      console.log(`🔴 Watcher disconnected: ${ws.id}`);
+      // optionally notify broadcaster that a watcher left
+      if (broadcaster && broadcaster.readyState === WebSocket.OPEN) {
+        broadcaster.send(JSON.stringify({ type: 'disconnect', id: ws.id }));
+      }
     }
   });
 });

@@ -6,8 +6,8 @@ import 'react-toastify/dist/ReactToastify.css';
 export default function Share() {
   const videoRef = useRef(null);
   const imageRef = useRef(null);
-  const peerRef = useRef();
   const wsRef = useRef();
+  const peers = useRef({});
   const streamRef = useRef(null);
 
   const toastQueue = useRef([]);
@@ -25,6 +25,7 @@ export default function Share() {
       pauseOnFocusLoss: false,
       pauseOnHover: false,
       theme: 'light',
+      icon: false,
       transition: Slide,
       onOpen: () => {
         setTimeout(() => {
@@ -51,6 +52,7 @@ export default function Share() {
     if (isStreaming) return;
     setIsStreaming(true);
     showLog('Starting broadcast...');
+
     wsRef.current = new WebSocket('ws://localhost:4000');
 
     wsRef.current.onopen = () => {
@@ -60,6 +62,7 @@ export default function Share() {
 
     const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
     streamRef.current = stream;
+    videoRef.current.srcObject = stream;
     showToast('⏺️ Stream iniciada.');
 
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -74,45 +77,53 @@ export default function Share() {
     hiddenVideo.srcObject = stream;
     hiddenVideo.play();
 
-    const pc = new RTCPeerConnection();
-    peerRef.current = pc;
-    showLog('RTCPeerConnection created.');
+    // Readicionar
+    // let trackCount = 0;
+    // stream.getTracks().forEach(track => {
+    //   pc.addTrack(track, stream);
+    //   showLog('Faixa adicionada: ' + track.kind);
+    //   trackCount++;
+    // });
+    // if (trackCount < 2) showToast('🔇 A stream está silenciada.');
 
-    let trackCount = 0;
-    stream.getTracks().forEach(track => {
-      pc.addTrack(track, stream);
-      showLog('Faixa adicionada: ' + track.kind);
-      trackCount++;
-    });
-    if (trackCount < 2) showToast('🔇 A stream está silenciada.');
-
-    pc.onicecandidate = ({ candidate }) => {
-      if (candidate) {
-        showLog('Sending ICE candidate from broadcaster:', candidate);
-        wsRef.current.send(JSON.stringify({ type: 'ice-candidate', candidate }));
-      }
-    };
-
-    pc.onconnectionstatechange = () => {
-      if (['disconnected', 'closed'].includes(pc.connectionState)) {
-        showToast('🔌 Espectador desconectado.');
-      }
-    };
+    // pc.onconnectionstatechange = () => {
+    //   if (['disconnected', 'closed'].includes(pc.connectionState)) {
+    //     showToast('🔌 Espectador desconectado.');
+    //   }
+    // };
 
     wsRef.current.onmessage = async ({ data }) => {
       const msg = JSON.parse(data);
       showLog('Message received by broadcaster:', msg);
 
       if (msg.type === 'watcher') {
-        showToast('👀 Espectador conectado.');
+        const id = msg.id;
+        const pc = new RTCPeerConnection();
+        peers.current[id] = pc;
+        showLog('New RTCPeerConnection created.');
+
+        stream.getTracks().forEach(track => pc.addTrack(track, stream));
+        pc.onicecandidate = ({ candidate }) => {
+          if (candidate) {
+            showLog('Sending ICE candidate from broadcaster:', candidate);
+            wsRef.current.send(JSON.stringify({ type: 'ice-candidate', id, candidate }));
+          }
+        };
+
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
-        wsRef.current.send(JSON.stringify({ type: 'offer', sdp: offer }));
+        wsRef.current.send(JSON.stringify({ type: 'offer', id, sdp: offer }));
+
+        showToast('👀 Espectador conectado.');
+
       } else if (msg.type === 'answer') {
         showLog('Received answer from watcher.');
+        const pc = peers.current[msg.id];
         await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+
       } else if (msg.type === 'ice-candidate') {
         showLog('Received ICE candidate from watcher.');
+        const pc = peers.current[msg.id];
         await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
       }
     };
@@ -143,11 +154,8 @@ export default function Share() {
 
     // stop media tracks
     streamRef.current.getTracks().forEach(track => track.stop());
-
-    // close peer and websocket
-    peerRef.current.close();
     wsRef.current.close();
-
+    wsRef.current = null;
     setImageLoaded(false);
   };
 
@@ -165,7 +173,7 @@ export default function Share() {
 
       <video ref={videoRef} muted playsInline style={{ display: 'none' }} />
       {isStreaming && !imageLoaded && <div style={{ fontSize: '1.5rem', color: '#666' }}>Iniciando pré-visualização...</div>}
-      <img ref={imageRef} alt="Screen snapshot" style={{ display: imageLoaded ? 'block' : 'none', width: '960px', height: '540px', objectFit: 'cover' }} />
+      <img ref={imageRef} style={{ display: imageLoaded ? 'block' : 'none', width: '960px', height: '540px', objectFit: 'cover' }} />
       <ToastContainer />
     </div>
   );
