@@ -134,7 +134,7 @@ export default function Share() {
         width: '100vw',
         height: '100vh',
         overflow: 'hidden',
-        backgroundColor: '#212121',
+        backgroundColor: '#0F0F0F',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
@@ -147,21 +147,26 @@ export default function Share() {
         style={{
           width: '90%',
           maxWidth: '960px',
-          border: '2px solid transparent',
-          borderImage: 'linear-gradient(45deg, #00d2ff, #3a7bd5) 2',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          alignItems: 'center',
-          textAlign: 'center',
+          position: 'relative',
+          borderRadius: '30px 30px 0 0',
           color: '#ffffff',
           textShadow: '0 2px 8px rgba(0,0,0,0.7)',
-          background: 'linear-gradient(to right, #00d2ff, #3a7bd5)'
+          background: 'linear-gradient(to right, #00d2ff, #3a7bd5)',
+          padding: '2px'
         }}
       >
-        <div style={{ paddingBottom: '20px' }}>
-          <h1 style={{ fontSize: '8rem', margin: 0, fontFamily: 'monospace' }}>C I M E N A</h1>
-          <span style={{ fontSize: '2.5rem', fontFamily: 'sans-serif' }}>S t u d i o</span>
+        <div
+          style={{
+            borderRadius: '28px 28px 0 0',
+            background: 'linear-gradient(to right, #00d2ff, #3a7bd5)',
+            padding: '20px',
+            textAlign: 'center'
+          }}
+        >
+          <div style={{ paddingBottom: '20px' }}>
+            <h1 style={{ fontSize: '8rem', margin: 0, fontFamily: 'monospace' }}>C I M E N A</h1>
+            <span style={{ fontSize: '2.5rem', fontFamily: 'sans-serif' }}>S t u d i o</span>
+          </div>
         </div>
       </div>
 
@@ -266,10 +271,10 @@ export default function Share() {
             transition: background-size 0.3s ease, box-shadow 1.5s ease;
             background-position: right center;
             background-size: 200% auto;
-            animation: pulse512 1.5s infinite
+            animation: start-pulse 1.5s infinite
           }
 
-          @keyframes pulse512 {
+          @keyframes start-pulse {
             0% {
               box-shadow: 0 0 0 0 #05bada66;
             }
@@ -304,10 +309,10 @@ export default function Share() {
           .stop-button:hover {
             background-position: right center;
             background-size: 200% auto;
-            animation: pulse513 1.5s infinite;
+            animation: stop-pulse 1.5s infinite;
           }
 
-          @keyframes pulse513 {
+          @keyframes stop-pulse {
             0% {
               box-shadow: 0 0 0 0 #ff4d4d;
             }
