@@ -107,4 +107,5 @@ wss.on('connection', (ws) => {
   });
 });
 
-server.listen(4000, () => console.log('🚀 Signaling server running on :4000'));
+const PORT = process.env.PORT || 4000;
+server.listen(PORT, '0.0.0.0', () => console.log(`🚀 Signaling server running on :${PORT}`));
