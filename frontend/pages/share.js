@@ -1,5 +1,5 @@
 // share.js
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { showToast, showLog } from '../components/toastUtils';
@@ -13,17 +13,30 @@ export default function Share() {
 
   const [imageLoaded, setImageLoaded] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [connections, setConnections] = useState([]);
+  const [isWideScreen, setIsWideScreen] = useState(false);
+
+  const updateConnections = () => {
+    const wsConnected = wsRef.current && wsRef.current.readyState === WebSocket.OPEN
+      ? [{ type: 'Broadcaster', id: 'Host' }]
+      : [];
+
+    const activeConnections = [...wsConnected, ...Object.keys(peers.current).map(id => ({ type: 'Viewer', id }))];
+    setConnections(activeConnections);
+  };
 
   const startStreaming = async () => {
     if (isStreaming) return;
     setIsStreaming(true);
     showLog('Starting broadcast...');
 
-    wsRef.current = new WebSocket('ws://localhost:4000');
+    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:4000';
+    wsRef.current = new WebSocket(wsUrl);
 
     wsRef.current.onopen = () => {
       showLog('WebSocket connected (broadcaster).');
       wsRef.current.send(JSON.stringify({ type: 'broadcaster' }));
+      updateConnections();
     };
 
     const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
@@ -40,9 +53,7 @@ export default function Share() {
       wsRef.current.send(JSON.stringify({ type: 'start' }));
     }
 
-    stream.getTracks().forEach(track => {
-      track.onended = () => handleStop();
-    });
+    stream.getTracks().forEach(track => track.onended = handleStop);
 
     const hiddenVideo = videoRef.current;
     hiddenVideo.srcObject = stream;
@@ -65,7 +76,9 @@ export default function Share() {
 
         pc.onconnectionstatechange = () => {
           if (['disconnected', 'closed'].includes(pc.connectionState)) {
-            showToast('🔌 Espectador desconectado:', id);
+            delete peers.current[id];
+            updateConnections();
+            showToast(`🔌 Espectador desconectado: ${id}`);
           }
         };
 
@@ -80,7 +93,8 @@ export default function Share() {
         await pc.setLocalDescription(offer);
         wsRef.current.send(JSON.stringify({ type: 'offer', id, sdp: offer }));
 
-        showToast('👀 Espectador conectado:', id);
+        showToast(`👀 Espectador conectado: ${id}`);
+        updateConnections();
 
       } else if (msg.type === 'answer') {
         showLog('Received answer from watcher.');
@@ -94,6 +108,7 @@ export default function Share() {
       }
     };
 
+    // Canvas para snapshots
     const canvas = document.createElement('canvas');
     canvas.width = 960;
     canvas.height = 540;
@@ -122,8 +137,29 @@ export default function Share() {
     streamRef.current?.getTracks().forEach(track => track.stop());
     wsRef.current.close();
     wsRef.current = null;
+    peers.current = {};
     setImageLoaded(false);
+    setConnections([]);
   };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      wsRef.current?.close();
+      streamRef.current?.getTracks().forEach(t => t.stop());
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsWideScreen(window.innerWidth > 1500);
+    };
+    window.addEventListener('resize', handleResize);
+    handleResize();
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
 
   return (
     <div
@@ -136,85 +172,125 @@ export default function Share() {
         overflow: 'hidden',
         backgroundColor: '#0F0F0F',
         display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
         fontFamily: 'sans-serif'
       }}
     >
 
+      {/* Side Panel */}
       <div
         style={{
-          width: '90%',
-          maxWidth: '960px',
+          width: '250px',
+          backgroundColor: '#1a1a1a',
+          color: '#fff',
+          padding: '1rem',
+          boxShadow: '2px 0 8px rgba(0,0,0,0.7)',
+          fontFamily: 'sans-serif',
           position: 'relative',
-          borderRadius: '30px 30px 0 0',
-          color: '#ffffff',
-          textShadow: '0 2px 8px rgba(0,0,0,0.7)',
-          background: 'linear-gradient(to right, #00d2ff, #3a7bd5)',
-          padding: '2px'
+          transform: connections.length > 0 ? 'translateX(0)' : 'translateX(-100%)',
+          transition: 'transform 0.3s ease-out'
         }}
       >
+        {connections.length > 0 && (
+          <>
+            <h2 style={{ marginTop: 0 }}>Conexões Ativas</h2>
+            <ul style={{ listStyleType: 'none', padding: 0 }}>
+              {connections.map((conn, index) => (
+                <li key={index} style={{ fontSize: '1.2rem' }}>
+                  {conn.type === 'Broadcaster' ? '🎥 ' : '👀 '} {conn.type}: {conn.id}
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </div>
+
+      {/* Main Content */}
+      <div
+        style={{
+          flexGrow: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          transform: isWideScreen ? 'translateX(-125px)' : 'none'
+        }}
+      >
+
+        {/* Header */}
         <div
           style={{
+            width: '90%',
+            maxWidth: '960px',
+            position: 'relative',
+            borderRadius: '30px 30px 0 0',
+            color: '#ffffff',
+            textShadow: '0 2px 8px rgba(0,0,0,0.7)',
+            background: 'linear-gradient(to right, #00d2ff, #3a7bd5)',
+            padding: '2px'
+          }}
+        >
+          <div style={{
             borderRadius: '28px 28px 0 0',
             background: 'linear-gradient(to right, #00d2ff, #3a7bd5)',
             padding: '20px',
             textAlign: 'center'
           }}
-        >
-          <div style={{ paddingBottom: '20px' }}>
-            <h1 style={{ fontSize: '8rem', margin: 0, fontFamily: 'monospace' }}>C I M E N A</h1>
-            <span style={{ fontSize: '2.5rem', fontFamily: 'sans-serif' }}>S t u d i o</span>
+          >
+            <div style={{ paddingBottom: '20px' }}>
+              <h1 style={{ fontSize: '8rem', margin: 0, fontFamily: 'monospace' }}>C I M E N A</h1>
+              <span style={{ fontSize: '2.5rem', fontFamily: 'sans-serif' }}>S t u d i o</span>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Container da prévia */}
-      <div
-        style={{
-          position: 'relative',
-          width: '90%',
-          maxWidth: '960px',
-          aspectRatio: '16/9',
-          border: '2px solid transparent',
-          borderImage: 'linear-gradient(45deg, #00d2ff, #3a7bd5) 2',
-          overflow: 'hidden',
-          backgroundColor: '#000'
-        }}
-      >
+        {/* Preview Container */}
+        <div
+          style={{
+            position: 'relative',
+            width: '90%',
+            maxWidth: '960px',
+            aspectRatio: '16/9',
+            border: '2px solid transparent',
+            borderImage: 'linear-gradient(45deg, #00d2ff, #3a7bd5) 2',
+            overflow: 'hidden',
+            backgroundColor: '#000'
+          }}
+        >
 
-        {/* Status */}
-        <div style={{
-          marginTop: '0.5rem',
-          marginLeft: '0.5rem',
-          position: 'absolute',
-          color: '#fff',
-          fontSize: '15px',
-          fontWeight: '600',
-          textAlign: 'center',
-          padding: '0.5rem 1rem',
-          borderRadius: '10px',
-          background: !isStreaming ? 'linear-gradient(45deg, #ff0000, #ff305d)' : 'linear-gradient(45deg, #2c3e50, #34495e)',
-          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
-          transition: 'background 0.3s, color 0.3s',
-          opacity: '90%',
-          zIndex: 10
-        }}>
-          <span style={{
-            fontSize: '15px',
-            fontWeight: '700',
-            color: isStreaming ? '#fffae6' : '#ecf0f1',
-            transition: 'color 0.3s',
-          }}>
-            {isStreaming ? '🟢 Transmissão ativa' : '🔴 Transmissão parada'}
-          </span>
-        </div>
-
-        {/* Texto de loading */}
-        {isStreaming && !imageLoaded && (
+          {/* Status Badge */}
           <div
             style={{
+              marginTop: '0.5rem',
+              marginLeft: '0.5rem',
+              position: 'absolute',
+              color: '#fff',
+              fontSize: '15px',
+              fontWeight: '600',
+              textAlign: 'center',
+              padding: '0.5rem 1rem',
+              borderRadius: '10px',
+              background: !isStreaming ? 'linear-gradient(45deg, #ff0000, #ff305d)' : 'linear-gradient(45deg, #2c3e50, #34495e)',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+              transition: 'background 0.3s, color 0.3s',
+              opacity: '90%',
+              zIndex: 10
+            }}
+          >
+            <span
+              style={{
+                fontSize: '15px',
+                fontWeight: '700',
+                color: '#ffffff',
+                transition: 'color 0.3s'
+              }}
+            >
+              {isStreaming ? '🟢 Transmissão ativa' : '🔴 Transmissão parada'}
+            </span>
+          </div>
+
+          {/* Loading Overlay */}
+          {isStreaming && !imageLoaded && (
+            <div style={{
               position: 'absolute',
               top: 0,
               left: 0,
@@ -228,109 +304,96 @@ export default function Share() {
               backgroundColor: 'rgba(255,255,255,0.1)',
               zIndex: 10
             }}
-          >
-            Iniciando pré-visualização...
+            >
+              Iniciando pré-visualização...
+            </div>
+          )}
+
+          {/* Hidden Video for capture */}
+          <video ref={videoRef} muted playsInline style={{ display: 'none' }} />
+
+          {/* Preview Image */}
+          <img ref={imageRef} alt="Preview" style={{ display: imageLoaded ? 'block' : 'none', width: '100%', height: '100%', objectFit: 'cover' }} />
+        </div>
+
+        {/* Controls */}
+        <div style={{ marginTop: '20px' }}>
+          <div>
+            <style>
+              {`
+              .start-button {
+                border: none;
+                color: #fff;
+                background-image: linear-gradient(30deg, #0400ff, #4ce3f7);
+                border-radius: 20px;
+                background-size: 100% auto;
+                font-family: inherit;
+                font-size: 17px;
+                padding: 0.6em 1.5em;
+                cursor: pointer;
+                transition: background-size 0.3s ease, box-shadow 1.5s ease;
+                background-position: right center;
+                background-size: 200% auto;
+                animation: start-pulse 1.5s infinite
+              }
+
+              @keyframes start-pulse {
+                0% {
+                  box-shadow: 0 0 0 0 #05bada66;
+                }
+                70% {
+                  box-shadow: 0 0 0 10px rgb(218 103 68 / 0%);
+                }
+                100% {
+                  box-shadow: 0 0 0 0 rgb(218 103 68 / 0%);
+                }
+              }
+            `}
+            </style>
+            {!isStreaming && <button onClick={startStreaming} className='start-button'>Iniciar Stream</button>}
           </div>
-        )}
 
-        {/* Vídeo escondido */}
-        <video
-          ref={videoRef}
-          muted
-          playsInline
-          style={{ display: 'none' }}
-        />
+          <div>
+            <style>
+              {`
+              .stop-button {
+                border: none;
+                color: #fff;
+                background-image: linear-gradient(30deg, #ff0000, #ff305d);
+                border-radius: 20px;
+                background-size: 100% auto;
+                font-family: inherit;
+                font-size: 17px;
+                padding: 0.6em 1.5em;
+                cursor: pointer;
+                transition: background-size 0.3s, background-position 0.3s;
+              }
 
-        {/* Imagem responsiva */}
-        <img
-          ref={imageRef}
-          alt="Preview"
-          style={{
-            display: imageLoaded ? 'block' : 'none',
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover'
-          }}
-        />
-      </div>
+              .stop-button:hover {
+                background-position: right center;
+                background-size: 200% auto;
+                animation: stop-pulse 1.5s infinite;
+              }
 
-      {/* Botão */}
-      <div style={{ marginTop: '20px' }}>
-        <div>
-          <style>{`
-          .start-button {
-            border: none;
-            color: #fff;
-            background-image: linear-gradient(30deg, #0400ff, #4ce3f7);
-            border-radius: 20px;
-            background-size: 100% auto;
-            font-family: inherit;
-            font-size: 17px;
-            padding: 0.6em 1.5em;
-            cursor: pointer;
-            transition: background-size 0.3s ease, box-shadow 1.5s ease;
-            background-position: right center;
-            background-size: 200% auto;
-            animation: start-pulse 1.5s infinite
-          }
-
-          @keyframes start-pulse {
-            0% {
-              box-shadow: 0 0 0 0 #05bada66;
-            }
-            70% {
-              box-shadow: 0 0 0 10px rgb(218 103 68 / 0%);
-            }
-            100% {
-              box-shadow: 0 0 0 0 rgb(218 103 68 / 0%);
-            }
-          }
-          `}</style>
-          {!isStreaming && <button onClick={startStreaming} className='start-button'>
-            Iniciar Stream
-          </button>}
+              @keyframes stop-pulse {
+                0% {
+                  box-shadow: 0 0 0 0 #ff4d4d;
+                }
+                70% {
+                  box-shadow: 0 0 0 10px rgb(255 0 0 / 30%);
+                }
+                100% {
+                  box-shadow: 0 0 0 0 rgb(255 0 0 / 30%);
+                }
+              }
+          `}
+            </style>
+            {isStreaming && <button onClick={handleStop} className='stop-button'>Parar Stream</button>}
+          </div>
         </div>
 
-        <div>
-          <style>{`
-          .stop-button {
-            border: none;
-            color: #fff;
-            background-image: linear-gradient(30deg, #ff0000, #ff305d);
-            border-radius: 20px;
-            background-size: 100% auto;
-            font-family: inherit;
-            font-size: 17px;
-            padding: 0.6em 1.5em;
-            cursor: pointer;
-            transition: background-size 0.3s, background-position 0.3s;
-          }
-
-          .stop-button:hover {
-            background-position: right center;
-            background-size: 200% auto;
-            animation: stop-pulse 1.5s infinite;
-          }
-
-          @keyframes stop-pulse {
-            0% {
-              box-shadow: 0 0 0 0 #ff4d4d;
-            }
-            70% {
-              box-shadow: 0 0 0 10px rgb(255 0 0 / 30%);
-            }
-            100% {
-              box-shadow: 0 0 0 0 rgb(255 0 0 / 30%);
-            }
-          }
-      `}</style>
-          {isStreaming && <button onClick={handleStop} className='stop-button'>
-            Parar Stream
-          </button>}
-        </div>
       </div>
-
       <ToastContainer />
-    </div >
+    </div>
   );
 }

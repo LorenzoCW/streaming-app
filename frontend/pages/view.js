@@ -21,7 +21,8 @@ export default function View() {
     showLog('Connecting to signaling server as viewer...');
 
     if (wsRef.current) wsRef.current.close();
-    wsRef.current = new WebSocket('ws://localhost:4000');
+    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:4000';
+    wsRef.current = new WebSocket(wsUrl);
     showLog('RTCPeerConnection created (viewer).');
 
     wsRef.current.onopen = () => {
