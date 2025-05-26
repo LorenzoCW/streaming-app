@@ -6,6 +6,7 @@ import { showToast, showLog } from '../components/toastUtils';
 import WaveText from '../components/waveText';
 const backgroundImg = '/images/background.png';
 const muteImg = '/images/no-sound.png';
+import styles from '../styles/view.module.css';
 
 export default function View() {
   const videoRef = useRef(null);
@@ -115,42 +116,10 @@ export default function View() {
 
   return (
     <>
-      <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', overflow: 'hidden', backgroundColor: 'black' }}>
-
+      <div className={styles.container}>
         {isStreaming && !audioEnabled && (
-          <div
-            onClick={handleEnableAudio}
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              zIndex: 20,
-              width: '100%',
-              height: '100%',
-              backgroundColor: 'rgba(0, 0, 0, 0.247)',
-              padding: 0,
-              margin: 0,
-              cursor: 'pointer',
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
-            }}
-          >
-            <img
-              src={muteImg}
-              alt="Som desligado"
-              style={{
-                zIndex: 20,
-                width: '100px',
-                height: '100px',
-                padding: 0,
-                margin: 0,
-                cursor: 'pointer',
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-              }}
-            />
+          <div className={styles.overlay} onClick={handleEnableAudio}>
+            <img src={muteImg} alt="Som desligado" className={styles.muteIcon} />
           </div>
         )}
 
@@ -159,43 +128,21 @@ export default function View() {
           autoPlay
           muted={!audioEnabled}
           playsInline
-          style={{ width: '100%', height: '100%', zIndex: 10 }}
+          className={styles.video}
         />
 
         {!isStreaming && (
-          <div
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              width: '100%',
-              height: '100%',
-              backgroundImage: `url(${backgroundImg})`,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'center',
-              alignItems: 'center',
-              textAlign: 'center',
-              color: '#ffffff',
-              textShadow: '0 2px 8px rgba(0,0,0,0.7)',
-            }}
-          >
-            <div style={{ height: '60%' }}>
-              <h1 style={{ fontSize: '8rem', margin: 0, fontFamily: 'monospace' }}>C I M E N A</h1>
-              <span style={{ fontSize: '2.5rem', marginTop: '0.5rem', fontFamily: 'sans-serif' }}>
-                {streamEnded
-                  ? <p>Stream encerrada</p>
-                  : <WaveText />
-                }
+          <div className={styles.poster}>
+            <div className={styles.textWrapper}>
+              <h1 className={styles.heading}>C I M E N A</h1>
+              <span className={styles.subHeading}>
+                {streamEnded ? <p>Stream encerrada</p> : <WaveText />}
               </span>
             </div>
-
           </div>
         )}
-
       </div>
+
       <ToastContainer />
     </>
   );
