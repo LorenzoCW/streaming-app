@@ -9,6 +9,18 @@ const wss = new WebSocket.Server({ server });
 
 let broadcaster = null;
 
+function generateUniqueId() {
+  let id;
+  let exists;
+  do {
+    id = Math.floor(1000 + Math.random() * 9000);
+    exists = Array.from(wss.clients).some(
+      client => client.role === 'viewer' && client.id === id
+    );
+  } while (exists);
+  return id;
+}
+
 wss.on('connection', (ws) => {
   console.log('\n🟢 New WebSocket connection established.');
 
@@ -25,7 +37,7 @@ wss.on('connection', (ws) => {
 
       case 'watcher':
         ws.role = 'viewer';
-        ws.id = Math.floor(1000 + Math.random() * 9000);
+        ws.id = generateUniqueId();
         console.log(`👀 Watcher connected: ${ws.id}`);
         if (broadcaster && broadcaster.readyState === WebSocket.OPEN) {
           broadcaster.send(JSON.stringify({ type: 'watcher', id: ws.id }));
@@ -108,4 +120,4 @@ wss.on('connection', (ws) => {
 });
 
 const PORT = process.env.PORT || 4000;
-server.listen(PORT, '0.0.0.0', () => console.log(`🚀 Signaling server running on :${PORT}`));
+server.listen(PORT, '0.0.0.0', () => console.log(`🚀 Signaling server running on port :${PORT}`));
