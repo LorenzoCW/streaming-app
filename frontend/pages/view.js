@@ -15,11 +15,13 @@ export default function View() {
   const watcherIdRef = useRef(null);
 
   const [audioEnabled, setAudioEnabled] = useState(false);
+  const [hasAudio, setHasAudio] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamEnded, setStreamEnded] = useState(false);
 
   const connect = () => {
     showLog('Connecting to signaling server as viewer...');
+    setHasAudio(false);
 
     if (wsRef.current) wsRef.current.close();
     const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:4000';
@@ -49,9 +51,14 @@ export default function View() {
           peerRef.current = pc;
 
           pc.ontrack = event => {
+            const stream = event.streams[0];
+            if (stream.getAudioTracks().length > 0) {
+              setHasAudio(true);
+            }
+
             if (event.track.kind === 'video') showToast('✅ Conectado à stream');
             showLog('Received media stream from broadcaster.');
-            videoRef.current.srcObject = event.streams[0];
+            videoRef.current.srcObject = stream;
             videoRef.current.play().catch(() => { showLog('Previous video track interrupted.') });
             setIsStreaming(true);
           };
@@ -117,7 +124,7 @@ export default function View() {
   return (
     <>
       <div className={styles.container}>
-        {isStreaming && !audioEnabled && (
+        {isStreaming && hasAudio && !audioEnabled && (
           <div className={styles.overlay} onClick={handleEnableAudio}>
             <img src={muteImg} alt="Som desligado" className={styles.muteIcon} />
           </div>
