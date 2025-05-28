@@ -16,6 +16,7 @@ export default function Share() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [connections, setConnections] = useState([]);
   const [isWideScreen, setIsWideScreen] = useState(false);
+  const [buttonsDisabled, setButtonsDisabled] = useState(false);
 
   const updateConnections = () => {
     const wsConnected = wsRef.current && wsRef.current.readyState === WebSocket.OPEN
@@ -27,7 +28,8 @@ export default function Share() {
   };
 
   const startStreaming = () => {
-    if (isStreaming) return;
+    if (isStreaming || buttonsDisabled) return;
+    disableButtonsTemporarily();
     showLog('Starting broadcaster handshake...');
 
     const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:4000';
@@ -149,7 +151,8 @@ export default function Share() {
   };
 
   const handleStop = () => {
-    if (!isStreaming) return;
+    if (!isStreaming || buttonsDisabled) return;
+    disableButtonsTemporarily();
     setIsStreaming(false);
     showToast('⏹️ Stream encerrada');
 
@@ -164,6 +167,14 @@ export default function Share() {
     setImageLoaded(false);
     setConnections([]);
   };
+
+  const disableButtonsTemporarily = () => {
+    setButtonsDisabled(true);
+    setTimeout(() => {
+      setButtonsDisabled(false);
+    }, 5000);
+  };
+
 
   // cleanup on unmount
   useEffect(() => {
@@ -232,10 +243,15 @@ export default function Share() {
 
         {/* Controls */}
         <div>
-          {isStreaming
-            ? <button onClick={handleStop} className={styles.stopButton}>Parar Stream</button>
-            : <button onClick={startStreaming} className={styles.startButton}>Iniciar Stream</button>
-          }
+          {isStreaming ? (
+            <button onClick={handleStop} disabled={buttonsDisabled} className={styles.stopButton}>
+              Parar Stream
+            </button>
+          ) : (
+            <button onClick={startStreaming} disabled={buttonsDisabled} className={styles.startButton}>
+              Iniciar Stream
+            </button>
+          )}
         </div>
       </div>
 
