@@ -19,16 +19,16 @@ export default function Share() {
 
   const updateConnections = () => {
     const wsConnected = wsRef.current && wsRef.current.readyState === WebSocket.OPEN
-      ? [{ type: 'Broadcaster', id: 'Host' }]
+      ? [{ type: 'Host', id: 'Você' }]
       : [];
 
     const activeConnections = [...wsConnected, ...Object.keys(peers.current).map(id => ({ type: 'Viewer', id }))];
     setConnections(activeConnections);
   };
 
-  const startStreaming = async () => {
+  const startStreaming = () => {
     if (isStreaming) return;
-    showLog('Starting broadcast...');
+    showLog('Starting broadcaster handshake...');
 
     const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:4000';
     wsRef.current = new WebSocket(wsUrl);
@@ -39,6 +39,28 @@ export default function Share() {
       updateConnections();
     };
 
+    wsRef.current.onmessage = async ({ data }) => {
+      const msg = JSON.parse(data);
+      showLog('Message received by broadcaster:', msg);
+
+      if (msg.type === 'error' && msg.code === 'BROADCASTER_EXISTS') {
+        showToast('❌ ' + msg.message);
+        wsRef.current.close();
+        return;
+      }
+
+      if (msg.type === 'broadcaster-accepted') {
+        showLog('Broadcaster accepted, starting screen sharing...');
+        await beginStreaming();
+        return;
+      }
+
+      handleSignalingMessage(msg);
+    };
+  };
+
+  const beginStreaming = async () => {
+    showLog('Capturing screen and audio...');
     const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
     streamRef.current = stream;
     videoRef.current.srcObject = stream;
@@ -60,56 +82,7 @@ export default function Share() {
     hiddenVideo.srcObject = stream;
     hiddenVideo.play();
 
-    wsRef.current.onmessage = async ({ data }) => {
-      const msg = JSON.parse(data);
-      showLog('Message received by broadcaster:', msg);
-
-      if (msg.type === 'watcher') {
-        const id = msg.id;
-        const pc = new RTCPeerConnection();
-        peers.current[id] = pc;
-        showLog('New RTCPeerConnection created.');
-
-        stream.getTracks().forEach(track => {
-          pc.addTrack(track, stream);
-          showLog('Faixa adicionada: ' + track.kind);
-        });
-
-        pc.onconnectionstatechange = () => {
-          if (['disconnected', 'closed'].includes(pc.connectionState)) {
-            delete peers.current[id];
-            updateConnections();
-            showToast(`🔌 Espectador desconectado: ${id}`);
-          }
-        };
-
-        pc.onicecandidate = ({ candidate }) => {
-          if (candidate) {
-            showLog('Sending ICE candidate from broadcaster:', candidate);
-            wsRef.current.send(JSON.stringify({ type: 'ice-candidate', id, candidate }));
-          }
-        };
-
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        wsRef.current.send(JSON.stringify({ type: 'offer', id, sdp: offer }));
-
-        showToast(`👀 Espectador conectado: ${id}`);
-        updateConnections();
-
-      } else if (msg.type === 'answer') {
-        showLog('Received answer from watcher.');
-        const pc = peers.current[msg.id];
-        await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
-
-      } else if (msg.type === 'ice-candidate') {
-        showLog('Received ICE candidate from watcher.');
-        const pc = peers.current[msg.id];
-        await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
-      }
-    };
-
-    // Canvas para snapshots
+    // snapshots
     const canvas = document.createElement('canvas');
     canvas.width = 960;
     canvas.height = 540;
@@ -124,6 +97,55 @@ export default function Share() {
     }, 5000);
 
     streamRef.current._cleanup = () => clearInterval(intervalId);
+  };
+
+  const handleSignalingMessage = async (msg) => {
+    if (msg.type === 'watcher') {
+      const id = msg.id;
+      const pc = new RTCPeerConnection();
+      peers.current[id] = pc;
+      showLog('New RTCPeerConnection created.');
+
+      const localStream = streamRef.current;
+      localStream.getTracks().forEach(track => {
+        pc.addTrack(track, localStream);
+        showLog('Faixa adicionada: ' + track.kind);
+      });
+
+      pc.onconnectionstatechange = () => {
+        if (['disconnected', 'closed'].includes(pc.connectionState)) {
+          delete peers.current[id];
+          updateConnections();
+          showToast(`🔌 Espectador desconectado: ${id}`);
+        }
+      };
+
+      pc.onicecandidate = ({ candidate }) => {
+        if (candidate) {
+          showLog('Sending ICE candidate from broadcaster:', candidate);
+          wsRef.current.send(JSON.stringify({ type: 'ice-candidate', id, candidate }));
+        }
+      };
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      wsRef.current.send(JSON.stringify({ type: 'offer', id, sdp: offer }));
+
+      showToast(`👀 Espectador conectado: ${id}`);
+      updateConnections();
+    }
+
+    else if (msg.type === 'answer') {
+      showLog('Received answer from watcher.');
+      const pc = peers.current[msg.id];
+      await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+    }
+
+    else if (msg.type === 'ice-candidate') {
+      showLog('Received ICE candidate from watcher.');
+      const pc = peers.current[msg.id];
+      await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
+    }
   };
 
   const handleStop = () => {
@@ -143,7 +165,7 @@ export default function Share() {
     setConnections([]);
   };
 
-  // Cleanup on unmount
+  // cleanup on unmount
   useEffect(() => {
     return () => {
       wsRef.current?.close();
@@ -173,7 +195,7 @@ export default function Share() {
             <ul style={{ listStyleType: 'none', padding: 0 }}>
               {connections.map((conn, index) => (
                 <li key={index} style={{ fontSize: '1.2rem' }}>
-                  {conn.type === 'Broadcaster' ? '🎥 ' : '👀 '} {conn.type}: {conn.id}
+                  {conn.type === 'Host' ? '🎥 ' : '👀 '} {conn.type}: {conn.id}
                 </li>
               ))}
             </ul>

@@ -30,9 +30,23 @@ wss.on('connection', (ws) => {
 
     switch (data.type) {
       case 'broadcaster':
-        ws.role = 'broadcaster';
-        broadcaster = ws;
-        console.log('🎥 Broadcaster connected.');
+        if (broadcaster && broadcaster.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: 'error',
+            code: 'BROADCASTER_EXISTS',
+            message: 'Já existe uma stream ativa no momento.'
+          }));
+          console.log('🚫 Tentativa de outro broadcaster recusada.');
+          ws.close();
+        } else {
+          ws.role = 'broadcaster';
+          broadcaster = ws;
+          console.log('🎥 Broadcaster conectado.');
+
+          ws.send(JSON.stringify({
+            type: 'broadcaster-accepted'
+          }));
+        }
         break;
 
       case 'watcher':
@@ -111,7 +125,6 @@ wss.on('connection', (ws) => {
       });
     } else if (ws.role === 'viewer') {
       console.log(`🔴 Watcher disconnected: ${ws.id}`);
-      // optionally notify broadcaster that a watcher left
       if (broadcaster && broadcaster.readyState === WebSocket.OPEN) {
         broadcaster.send(JSON.stringify({ type: 'disconnect', id: ws.id }));
       }
