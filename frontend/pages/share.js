@@ -35,6 +35,16 @@ export default function Share() {
     const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:4000';
     wsRef.current = new WebSocket(wsUrl);
 
+    wsRef.current.onerror = () => {
+      showToast('❌ Falha ao conectar ao servidor WebSocket');
+      if (wsRef.current.readyState !== WebSocket.CLOSED) {
+        wsRef.current.close();
+      }
+      wsRef.current = null;
+      setIsStreaming(false);
+      setConnections([]);
+    };
+
     wsRef.current.onopen = () => {
       showLog('WebSocket connected (broadcaster).');
       wsRef.current.send(JSON.stringify({ type: 'broadcaster' }));
@@ -46,7 +56,7 @@ export default function Share() {
       showLog('Message received by broadcaster:', msg);
 
       if (msg.type === 'error' && msg.code === 'BROADCASTER_EXISTS') {
-        showToast('❌ ' + msg.message);
+        showToast('🚫 ' + msg.message);
         wsRef.current.close();
         return;
       }
@@ -68,7 +78,7 @@ export default function Share() {
     try {
       stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
     } catch (err) {
-      showToast('❌ Compartilhamento de tela cancelado');
+      showToast('⏸️ Compartilhamento de tela cancelado');
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
         wsRef.current.close();
       }
