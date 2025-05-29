@@ -15,7 +15,7 @@ export default function Share() {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [connections, setConnections] = useState([]);
-  const [isWideScreen, setIsWideScreen] = useState(false);
+  const [isWideScreen, setIsWideScreen] = useState(true);
   const [buttonsDisabled, setButtonsDisabled] = useState(false);
 
   const updateConnections = () => {
@@ -63,7 +63,21 @@ export default function Share() {
 
   const beginStreaming = async () => {
     showLog('Capturing screen and audio...');
-    const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+    } catch (err) {
+      showToast('❌ Compartilhamento de tela cancelado');
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.close();
+      }
+      wsRef.current = null;
+      setConnections([]);
+      setIsStreaming(false);
+      return;
+    }
+
     streamRef.current = stream;
     videoRef.current.srcObject = stream;
     setIsStreaming(true);
@@ -172,7 +186,7 @@ export default function Share() {
     setButtonsDisabled(true);
     setTimeout(() => {
       setButtonsDisabled(false);
-    }, 5000);
+    }, 6000);
   };
 
 

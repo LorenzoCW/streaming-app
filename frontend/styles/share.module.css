@@ -160,6 +160,21 @@
   animation: stop-pulse 1.5s infinite;
 }
 
+.startButton:disabled,
+.stopButton:disabled {
+  animation: none;
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.startButton:disabled:hover,
+.stopButton:disabled:hover,
+.startButton:disabled:focus,
+.stopButton:disabled:focus {
+  box-shadow: none;
+}
+
 /* Keyframes */
 @keyframes start-pulse {
   0% {
@@ -189,16 +204,13 @@
   }
 }
 
-/* Ajustes para telas pequenas */
-
+/* Small screens */
 @media (max-width: 600px) {
 
-  /* Container principal continua full-screen, mas escondemos o sidePanel */
   .sidePanel {
     display: none;
   }
 
-  /* Título e subtítulo menores */
   .headerTitle {
     font-size: 4rem;
   }
@@ -207,7 +219,6 @@
     font-size: 1.2rem;
   }
 
-  /* Badge de status mais compacto */
   .statusBadge {
     font-size: 12px;
     padding: 0.3rem 0.6rem;
