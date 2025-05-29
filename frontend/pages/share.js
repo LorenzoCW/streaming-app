@@ -76,9 +76,27 @@ export default function Share() {
 
     let stream;
     try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+        throw new TypeError();
+      }
+
       stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+
     } catch (err) {
-      showToast('⏸️ Compartilhamento de tela cancelado');
+      switch (err.name) {
+        case 'NotAllowedError':
+          showToast('⏸️ Compartilhamento de tela cancelado');
+          break;
+
+        case 'TypeError':
+          showToast('📵 Compartilhamento de tela não é suportado em dispositivos móveis');
+          break;
+
+        default:
+          showToast('❌ Erro ao compartilhar a tela:', err.name);
+          break;
+      }
+
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
         wsRef.current.close();
       }
