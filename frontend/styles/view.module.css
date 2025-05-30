@@ -8,7 +8,6 @@
   width: 100vw;
   height: 100vh;
   overflow: hidden;
-  background-color: black;
 }
 
 /* Vídeo */
@@ -48,24 +47,17 @@
   left: 0;
   width: 100%;
   height: 100%;
-  background-image: url('/images/background.png');
-  background-size: cover;
-  background-position: center;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
   text-align: center;
-  color: #fff;
+  background-color: rgb(181, 229, 248);
+  color: white;
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
 }
 
-/* Text Wrapper */
-.textWrapper {
-  width: 100%;
-}
-
-/* Classe para o h1 */
+/* Heading */
 .heading {
   font-size: clamp(3rem, 15vw, 8rem);
   margin: 0;
@@ -73,12 +65,64 @@
   line-height: 1;
 }
 
-/* Classe para o span */
+/* SubHeading */
 .subHeading {
   display: block;
   margin-top: 0.5rem;
   font-size: clamp(1.5rem, 5vw, 2.5rem);
   font-family: sans-serif;
+}
+
+.waves {
+  position: absolute;
+  bottom: 0%;
+  width: 100%;
+  height: 15vh;
+  min-height: 100px;
+  max-height: 150px;
+  z-index: 10;
+}
+
+.fill {
+  background: rgba(21, 71, 139, 1);
+  position: absolute;
+  height: 0%;
+  width: 100%;
+  bottom: 0%;
+}
+
+.parallax>use {
+  animation: move-forever 25s cubic-bezier(0.55, 0.5, 0.45, 0.5) infinite;
+}
+
+.parallax>use:nth-child(1) {
+  animation-delay: -2s;
+  animation-duration: 7s;
+}
+
+.parallax>use:nth-child(2) {
+  animation-delay: -3s;
+  animation-duration: 10s;
+}
+
+.parallax>use:nth-child(3) {
+  animation-delay: -4s;
+  animation-duration: 13s;
+}
+
+.parallax>use:nth-child(4) {
+  animation-delay: -5s;
+  animation-duration: 20s;
+}
+
+@keyframes move-forever {
+  0% {
+    transform: translate3d(-90px, 0, 0);
+  }
+
+  100% {
+    transform: translate3d(85px, 0, 0);
+  }
 }
 
 /* Ajustes para telas pequenas */
@@ -89,5 +133,17 @@
 
   .subHeading {
     font-size: 1.9rem;
+  }
+
+  .waves {
+    bottom: 13%;
+    height: 10vh;
+    min-height: 50px;
+    max-height: 100px;
+  }
+
+  .fill {
+    background: rgba(21, 71, 139, 1);
+    height: 13%;
   }
 }

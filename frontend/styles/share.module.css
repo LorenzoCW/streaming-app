@@ -131,12 +131,12 @@
 /* Buttons */
 .startButton,
 .stopButton {
-  margin-top: 1rem;
+  margin-top: 2rem;
   border: none;
   color: #fff;
-  border-radius: 20px;
+  border-radius: 24px;
   font-family: inherit;
-  font-size: 17px;
+  font-size: 20px;
   padding: 0.6em 1.5em;
   cursor: pointer;
   transition: background-size 0.3s ease, box-shadow 1.5s ease;
