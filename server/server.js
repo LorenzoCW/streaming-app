@@ -23,6 +23,7 @@ function generateUniqueId() {
 
 wss.on('connection', (ws) => {
   console.log('\n🟢 New WebSocket connection established.');
+  ws.isAlive = true;
 
   ws.on('message', (message) => {
     console.log('📩 Received message of length:', message.length);
@@ -52,6 +53,7 @@ wss.on('connection', (ws) => {
       case 'watcher':
         ws.role = 'viewer';
         ws.id = generateUniqueId();
+        ws.isAlive = true;
         console.log(`👀 Watcher connected: ${ws.id}`);
         if (broadcaster && broadcaster.readyState === WebSocket.OPEN) {
           broadcaster.send(JSON.stringify({ type: 'watcher', id: ws.id }));
@@ -105,6 +107,49 @@ wss.on('connection', (ws) => {
             console.log('➡️ Start notification sent to a viewer.');
           }
         });
+        break;
+
+      case 'ping':
+        if (ws.role === 'broadcaster') {
+          console.log('🕵️‍♂️ Broadcaster enviou ping, repassando para os viewers...');
+          wss.clients.forEach(client => {
+            if (client.role === 'viewer') {
+              client.isAlive = false;
+            }
+          });
+
+          wss.clients.forEach(client => {
+            if (client.role === 'viewer' && client.readyState === WebSocket.OPEN) {
+              client.send(JSON.stringify({ type: 'server-ping' }));
+              console.log(`➡️ ping enviado para viewer ${client.id}`);
+            }
+          });
+
+          let viewerCount = 0;
+          wss.clients.forEach(client => {
+            if (client.role === 'viewer' && client.readyState === WebSocket.OPEN) {
+              viewerCount++;
+              client.send(JSON.stringify({ type: 'server-ping' }));
+            }
+          });
+          console.log(`➡️ ping enviado para ${viewerCount} viewers`);
+
+          setTimeout(() => {
+            wss.clients.forEach(client => {
+              if (client.role === 'viewer' && client.readyState === WebSocket.OPEN && !client.isAlive) {
+                console.log(`❌ Viewer ${client.id} não respondeu ao ping, desconectando...`);
+                client.close();
+              }
+            });
+          }, 1000);
+        }
+        break;
+
+      case 'pong':
+        if (ws.role === 'viewer') {
+          ws.isAlive = true;
+          console.log(`✅ Pong recebido de viewer ${ws.id}`);
+        }
         break;
 
       default:

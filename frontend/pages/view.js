@@ -4,9 +4,8 @@ import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { showToast, showLog } from '../components/toastUtils';
 import WaveText from '../components/waveText';
-const backgroundImg = '/images/background.png';
-const muteImg = '/images/no-sound.png';
 import styles from '../styles/view.module.css';
+const muteImg = '/images/no-sound.png';
 
 export default function View() {
   const videoRef = useRef(null);
@@ -41,6 +40,13 @@ export default function View() {
         if (msg.type === 'start') {
           showLog('Stream iniciada pelo host.');
           return connect();
+        }
+
+        else if (msg.type === 'server-ping') {
+          if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({ type: 'pong' }));
+          }
+          return;
         }
 
         else if (msg.type === 'offer') {
