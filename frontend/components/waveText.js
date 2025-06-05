@@ -18,13 +18,13 @@ const WaveText = () => {
 
             .wave-text span {
                 display: inline-block;
-                font-size: 2.5rem;
+                font-size: 3rem;
                 animation: wave 3s ease-in-out infinite;
             }
 
-            @media screen and (max-width: 400px) {
+            @media screen and (max-width: 470px) {
                 .wave-text span {
-                    font-size: 1.9rem;
+                    font-size: 2rem;
                 }
                 }
 

@@ -69,7 +69,8 @@
 .subHeading {
   display: block;
   margin-top: 0.5rem;
-  font-size: clamp(1.5rem, 5vw, 2.5rem);
+  /* font-size: clamp(1.5rem, 5vw, 2.5rem); */
+  font-size: 3rem;
   font-family: sans-serif;
 }
 
@@ -126,13 +127,13 @@
 }
 
 /* Ajustes para telas pequenas */
-@media screen and (max-width: 400px) {
+@media screen and (max-width: 470px) {
   .heading {
     font-size: 3rem;
   }
 
   .subHeading {
-    font-size: 1.9rem;
+    font-size: 2rem;
   }
 
   .waves {
